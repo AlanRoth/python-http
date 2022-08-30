@@ -14,9 +14,9 @@ class WSGIServer(object):
         listen_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         listen_socket.bind(server_address)
         listen_socket.listen(self.request_queue_size)
-        host, port = self.listen_socket.getsockname()[:2]
-        self.server_name = socket.getfqdn(host)
-        self.server_port = port
+        HOST, PORT = self.listen_socket.getsockname()[:2]
+        #self.server_name = socket.getfqdn(host)
+        #self.server_port = self.port
         self.headers_set = []
     
     def set_app(self, application):
@@ -26,7 +26,7 @@ class WSGIServer(object):
         listen_socket = self.listen_socket
         while True: #TODO Process pool, reusing processes? Close processes elegantly
             self.client_connection, client_address = listen_socket.accept()
-            process = mp.Process(target=self.handle_request)
+            process = mp.Process(target=self.handle_request) #TODO Make multiprocessing optional
             process.start()
             print(f"started process {process.pid}") #TODO Proper logging
             process.join(0)
@@ -42,7 +42,6 @@ class WSGIServer(object):
         result = self.application(env, self.start_response)
         
         self.finish_response(result)
-        return
         
     def parse_request(self, data):
         request_line = data.splitlines()[0] #TODO Fix IndexError
@@ -67,8 +66,8 @@ class WSGIServer(object):
         # Required CGI variables
         env['REQUEST_METHOD']    = self.request_method    # GET
         env['PATH_INFO']         = self.path              # /hello
-        env['SERVER_NAME']       = self.server_name       # localhost
-        env['SERVER_PORT']       = str(self.server_port)  # 8888
+        env['SERVER_NAME']       = socket.getfqdn(HOST)      # localhost
+        env['SERVER_PORT']       = PORT  # 8888
         
         return env
         
