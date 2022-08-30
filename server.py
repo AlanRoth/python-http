@@ -4,6 +4,66 @@ import multiprocessing as mp
 
 SERVER_ADDRESS = HOST, PORT = '', 8080 #TODO Make this configurable
 
+class EnvironBuilder():
+    
+    #Initialise with defaults
+    def __init__(self):
+        env = {}
+        env['wsgi.version']      = (1, 0)
+        env['wsgi.url_scheme']   = 'http'
+        env['wsgi.input']        = sys.stdin
+        env['wsgi.errors']       = sys.stderr
+        env['wsgi.multithread']  = False
+        env['wsgi.multiprocess'] = True
+        env['wsgi.run_once']     = False
+        # Required CGI variables
+        #env['REQUEST_METHOD']    = self.request_method    # GET
+        #env['PATH_INFO']         = self.path              # /hello
+        #env['SERVER_NAME']       = socket.getfqdn(HOST)      # localhost
+        env['SERVER_PORT']       = PORT  # 8888
+        
+        self.env = env
+    
+    def set_path(self, path):
+        self.env['PATH_INFO'] = path
+        return self
+    
+    def set_server_name(self, name):
+        self.env['SERVER_NAME'] = name
+        return self
+    
+    def set_method(self, method):
+        self.env['REQUEST_METHOD'] = method
+        return self
+    
+    def build_environ(self):
+        return self.env
+
+
+class Worker():
+    
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+    
+    def run(self, socket):
+        while True:
+            process = mp.Process(target=self.execute, args=socket.accept()).start()
+            process.join()
+            
+    def execute(self, connection, address):
+        request = self.parse_request(connection)
+        env_builder = EnvironBuilder()
+        env_builder.set_method(request[0]).set_path(request[1]).build_environ
+        
+    def parse_request(self, connection):
+        request = connection.recv(1024)
+        request = request.decode('utf-8')
+        
+        status_line = request.split('\n', 1)[0].rstrip('\r\n')
+        
+        return status_line.split()
+        
 class WSGIServer(object):
     address_family = socket.AF_INET
     socket_type = socket.SOCK_STREAM
@@ -24,15 +84,18 @@ class WSGIServer(object):
         
     def serve_forever(self): #TODO Serve while active and upto a timeout
         listen_socket = self.listen_socket
+        worker = Worker(HOST, PORT)
         while True: #TODO Process pool, reusing processes? Close processes elegantly
-            self.client_connection, client_address = listen_socket.accept()
-            process = mp.Process(target=self.handle_request) #TODO Make multiprocessing optional
-            process.start()
-            print(f"started process {process.pid}") #TODO Proper logging
-            process.join(0)
+            worker.run(listen_socket)
+            # self.client_connection, client_address = listen_socket.accept()
+            # process = mp.Process(target=self.handle_request) #TODO Make multiprocessing optional
+            # process.start()
+            # #TODO Proper logging
+            # process.join(0)
     
     def handle_request(self):
         request_data = self.client_connection.recv(1024)
+        print(f"raw_data: {request_data}")
         self.request_data = request_data = request_data.decode('utf-8')
         
         self.parse_request(request_data)
@@ -44,15 +107,19 @@ class WSGIServer(object):
         self.finish_response(result)
         
     def parse_request(self, data):
-        request_line = data.splitlines()[0] #TODO Fix IndexError
+        print(f"Data: {data}")
+        #request_line = data.splitlines()[0] #TODO Fix IndexError
+        
+        request_line = data.split('\n', 1)[0]
         request_line = request_line.rstrip('\r\n')
+        print(f"Request_line: {request_line}")
         
         #Break into components
         (self.request_method,
-        self.path,
-        self.request_version) = request_line.split()
+         self.path,
+         self.request_version) = request_line.split()
         
-    def get_environ(self):
+    def get_environ(self): #TODO Builder pattern
         #TODO Refactor with PEP8
         env = {}
         
