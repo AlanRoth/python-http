@@ -6,7 +6,7 @@ flask_app = Flask('flaskapp')
 @flask_app.route('/')
 def hello_world():
     return Response(
-        """Hello from Flask!""",
+        """<h1>Hello from Flask!</h1>""",
         mimetype='text/plain'
     )
     
